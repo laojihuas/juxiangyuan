@@ -672,10 +672,11 @@ async function callDeepSeek(text) {
         '可用菜品(ID:名称(价格)[分类]):\n' + dishList + '\n\n' +
         '规则:\n' +
         '1. table: 从语音中提取桌号，如果没提到桌号，默认设为"外卖"\n' +
-        '2. items: 匹配菜品ID(name仅用于验证)，qty为整数，note为该项的特殊口味或整体要求(如辣度、打包等)，没有则为空字符串\n' +
-        '3. 如果菜品名模糊，尽量匹配最相近的\n\n' +
+        '2. items: 匹配菜品ID(name仅用于验证)，qty为整数，note为该项的特殊口味(如辣度)，不要在此字段写全局性要求\n' +
+        '3. special_requirements: 将超出菜品以外的全局特殊要求（如"打包"、"多放葱花"、"快点上菜"、"少辣"等不针对特定菜的备注）提取为字符串，没有则为空字符串\n' +
+        '4. 如果菜品名模糊，尽量匹配最相近的\n\n' +
         '请只返回纯JSON，不要任何解释或markdown标记:\n' +
-        '{"table":"桌号","items":[{"dishId":ID,"name":"名称","qty":数量,"note":"备注"}]}\n\n' +
+        '{"table":"桌号","special_requirements":"全局备注","items":[{"dishId":ID,"name":"名称","qty":数量,"note":"单个菜品备注"}]}\n\n' +
         '点餐内容: ' + text;
 
     var messages = [{ role: 'user', content: prompt }];
@@ -723,6 +724,7 @@ async function callDeepSeek(text) {
     if (!order.table || !TABLES.includes(order.table)) {
         order.table = '外卖';
     }
+    if (!order.special_requirements) order.special_requirements = '';
     if (!order.items || !Array.isArray(order.items)) {
         order.items = [];
     }
@@ -759,6 +761,11 @@ function showVoiceOrder(order, rawText) {
         h += '<option value="'+t+'"'+(order.table===t?' selected':'')+'>'+t+'</option>';
     });
     h += '</select></div>';
+
+    // 订单全局备注
+    h += '<div class="vr-section"><div class="vr-label">📝 特殊要求</div>';
+    h += '<input id="voSpecial" class="vr-value editable" value="'+escapeHtml(order.special_requirements||'')+'" placeholder="如：打包、多放葱花、快点上菜..." style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;outline:none">';
+    h += '</div>';
 
     // 菜品列表
     h += '<div class="vr-section"><div class="vr-label">🍽 菜品</div>';
@@ -818,6 +825,8 @@ async function confirmVoiceOrder() {
     // 读取用户可能修改的值
     var tbl = document.getElementById('voTable');
     if (tbl) order.table = tbl.value;
+    var voSpecial = document.getElementById('voSpecial');
+    if (voSpecial) order.special_requirements = voSpecial.value.trim();
 
     // 移除临时字段
     var items = order.items.map(function(it) {
@@ -837,7 +846,8 @@ async function confirmVoiceOrder() {
         status: 'active',
         paid_amount: 0,
         completed_at: null,
-        unpaid_remark: ''
+        unpaid_remark: '',
+        special_requirements: order.special_requirements || ''
     };
 
     try {
