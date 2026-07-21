@@ -142,20 +142,32 @@
         .note-opt { padding:4px 12px; border-radius:12px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; cursor:pointer; }
         .note-opt.selected { border-color:var(--orange); color:var(--orange); }
 
-        /* 语音录入 */
-        .voice-bar { position:fixed; bottom:var(--tab-h); left:50%; transform:translateX(-50%); width:100%; max-width:480px; background:#1f1815; border-top:1px solid var(--border); z-index:99; padding:8px 12px; display:none; align-items:center; gap:10px; }
-        .voice-bar.show { display:flex; }
-        .voice-btn { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; background:var(--orange); color:#fff; border:none; border-radius:10px; padding:12px 20px; font-size:15px; font-weight:600; cursor:pointer; transition:all .2s; }
-        .voice-btn:active { opacity:.85; transform:scale(.97); }
-        .voice-btn.recording { background:var(--red); animation: pulse-rec 1.2s ease-in-out infinite; }
-        .voice-btn.processing { background:#555; pointer-events:none; }
-        .voice-btn .voice-icon { font-size:22px; }
-        .voice-btn .voice-timer { font-size:14px; font-weight:400; min-width:40px; }
-        @keyframes pulse-rec { 0%,100%{ box-shadow:0 0 0 0 rgba(231,76,60,.5); } 50%{ box-shadow:0 0 0 10px rgba(231,76,60,0); } }
-        .voice-status { font-size:12px; color:var(--text-dim); text-align:center; padding:4px 0; display:none; }
-        .voice-status.show { display:block; }
+        /* 新建订单 FAB 按钮 */
+        .fab-btn {
+            position:fixed; bottom:calc(var(--tab-h) + 20px); right:20px;
+            width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg, var(--orange), var(--orange-dark));
+            color:#fff; border:none; font-size:28px; cursor:pointer; z-index:99;
+            box-shadow:0 4px 16px rgba(255,140,58,.45); display:none;
+            align-items:center; justify-content:center; transition:all .25s;
+        }
+        .fab-btn.show { display:flex; }
+        .fab-btn:active { transform:scale(.9); box-shadow:0 2px 8px rgba(255,140,58,.3); }
+        .fab-btn::after { content:'＋'; font-weight:300; line-height:1; }
 
-        /* 语音结果弹窗 */
+        /* 新建订单弹窗 */
+        .new-order-modal { background:var(--card); border-radius:14px; width:100%; max-width:440px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; }
+        .new-order-modal .nom-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); }
+        .new-order-modal .nom-header h2 { font-size:16px; font-weight:600; }
+        .new-order-modal .nom-body { flex:1; overflow-y:auto; padding:16px; }
+        .new-order-modal .nom-body textarea { width:100%; min-height:120px; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:12px 14px; color:var(--text); font-size:14px; font-family:inherit; resize:vertical; outline:none; line-height:1.6; }
+        .new-order-modal .nom-body textarea:focus { border-color:var(--orange); }
+        .new-order-modal .nom-body .nom-hint { font-size:12px; color:var(--text-dim); margin-top:10px; line-height:1.6; }
+        .new-order-modal .nom-footer { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-top:1px solid var(--border); gap:8px; }
+        .new-order-modal .nom-footer .btn { border:none; border-radius:8px; padding:10px 22px; font-size:14px; cursor:pointer; font-weight:600; }
+        .new-order-modal .nom-footer .btn.cancel { background:var(--border); color:var(--text); }
+        .new-order-modal .nom-footer .btn.submit { background:var(--orange); color:#fff; flex:1; }
+
+        /* 确认订单弹窗（复用 voice-result 样式） */
         .voice-result { background:var(--card); border-radius:14px; width:100%; max-width:440px; max-height:85vh; display:flex; flex-direction:column; overflow:hidden; }
         .voice-result .vr-header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--border); }
         .voice-result .vr-header h2 { font-size:16px; font-weight:600; }
@@ -167,7 +179,6 @@
         .voice-result .vr-body .vr-value.editable:focus { border-color:var(--orange); }
         .voice-result .vr-body .vr-item { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,.04); }
         .voice-result .vr-body .vr-item .vr-dish-name { flex:1; font-size:13px; }
-        .voice-result .vr-body .vr-item .vr-qty { font-size:13px; font-weight:600; color:var(--orange); }
         .voice-result .vr-footer { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-top:1px solid var(--border); }
         .voice-result .vr-footer .btn { border:none; border-radius:8px; padding:8px 20px; font-size:14px; cursor:pointer; }
         .voice-result .vr-footer .btn.cancel { background:var(--border); color:var(--text); }
@@ -209,14 +220,8 @@
             <div class="tab" data-tab="admin" onclick="switchTab('admin')"><span class="tab-icon">📊</span>营业额</div>
         </div>
 
-        <!-- 语音录入栏 -->
-        <div class="voice-bar" id="voiceBar">
-            <button class="voice-btn" id="voiceBtn" onclick="toggleVoice()">
-                <span class="voice-icon" id="voiceIcon">🎤</span>
-                <span id="voiceLabel">语音录入</span>
-                <span class="voice-timer" id="voiceTimer" style="display:none">00:00</span>
-            </button>
-        </div>
+        <!-- 新建订单 FAB 按钮 -->
+        <button class="fab-btn" id="fabBtn" onclick="openNewOrder()"></button>
     </div>
 
     <div class="modal-overlay" id="modalOverlay"></div>
@@ -323,11 +328,11 @@ function switchTab(t) {
     document.querySelectorAll(".tab-page").forEach(function(x){ x.classList.remove("active"); });
     var e = document.getElementById("tab"+t[0].toUpperCase()+t.slice(1));
     if (e) e.classList.add("active");
-    // 语音栏仅在进行中页显示
-    var vb = document.getElementById("voiceBar");
+    // FAB 按钮仅在进行中页显示
+    var fab = document.getElementById("fabBtn");
     var ct = document.getElementById("contentArea");
-    if (t==="orders") { vb.classList.add("show"); ct.style.marginBottom="calc(var(--tab-h) + 62px)"; }
-    else { vb.classList.remove("show"); ct.style.marginBottom=""; }
+    if (t==="orders") { fab.classList.add("show"); ct.style.marginBottom=""; }
+    else { fab.classList.remove("show"); ct.style.marginBottom=""; }
     if (t==="orders") ro(); else if (t==="completed") rc(); else if (t==="menu") rm(); else if (t==="admin") ra();
 }
 
@@ -435,120 +440,36 @@ async function cda() {
     cm(); addAds={}; ro();
 }
 
-// ========== 语音录入订单 ==========
+// ========== 新建订单 ==========
 var TABLES = ["外卖","内1","内2","内3","内4","内5","内6","内7","内8","内9","外1","外2","外3","外4","外5","外6","外7","外8","外9"];
 var DEEPSEEK_KEY = 'sk-05515694b8a74eac949117aaacc79e82';
-var ALIYUN_APPKEY = 'tPGJ1kwOX7vAV7Sv';
-var recognition = null;
-var isRecording = false;
-var voiceTimerInterval = null;
-var voiceSeconds = 0;
 
-function toggleVoice() {
-    if (isRecording) { stopRecording(); return; }
-    startRecording();
+function openNewOrder() {
+    var h = '<div class="new-order-modal"><div class="nom-header"><h2>🆕 新建订单</h2><button class="close-btn" onclick="cm()">✕</button></div>';
+    h += '<div class="nom-body">';
+    h += '<textarea id="orderTextInput" placeholder="在此输入订单信息，例如：&#10;&#10;内3 烤牛肉串10串 烤生蚝5个 可乐2瓶&#10;微辣 打包&#10;&#10;AI 将自动识别菜品、数量和特殊要求" autofocus></textarea>';
+    h += '<div class="nom-hint">💡 输入格式：<b>桌号 菜品名称+数量 特殊要求</b><br>多个菜品用空格或逗号分隔，AI 会自动匹配菜单并整理</div>';
+    h += '</div>';
+    h += '<div class="nom-footer">';
+    h += '<button class="btn cancel" onclick="cm()">取消</button>';
+    h += '<button class="btn submit" onclick="submitTextOrder()">🤖 AI 解析下单</button>';
+    h += '</div></div>';
+    sm(h);
+    // 自动聚焦
+    setTimeout(function() {
+        var ta = document.getElementById('orderTextInput');
+        if (ta) ta.focus();
+    }, 100);
 }
 
-function startRecording() {
-    // 使用浏览器语音识别
-    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-        alert('您的浏览器不支持语音识别，请使用 Chrome 或 Edge 浏览器');
-        return;
-    }
-    recognition = new SpeechRecognition();
-    recognition.lang = 'zh-CN';
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+async function submitTextOrder() {
+    var input = document.getElementById('orderTextInput');
+    if (!input) return;
+    var text = input.value.trim();
+    if (!text) { alert('请输入订单信息'); return; }
 
-    var finalText = '';
-    var btn = document.getElementById('voiceBtn');
-    var icon = document.getElementById('voiceIcon');
-    var label = document.getElementById('voiceLabel');
-    var timer = document.getElementById('voiceTimer');
-
-    recognition.onresult = function(e) {
-        var interim = '';
-        for (var i = e.resultIndex; i < e.results.length; i++) {
-            if (e.results[i].isFinal) { finalText += e.results[i][0].transcript; }
-            else { interim += e.results[i][0].transcript; }
-        }
-        label.textContent = (finalText || interim) ? (finalText + (interim ? ' ' + interim : '')) : '正在听...';
-    };
-
-    recognition.onerror = function(e) {
-        console.warn('语音识别错误:', e.error);
-        if (e.error === 'no-speech') {
-            stopRecording();
-            alert('没有检测到语音，请重试。');
-            return;
-        }
-        if (e.error === 'aborted') return;
-        if (e.error === 'not-allowed') {
-            stopRecording();
-            alert('麦克风权限被拒绝。请在浏览器设置中允许麦克风访问，或直接在浏览器中打开页面使用。');
-            return;
-        }
-        stopRecording();
-        alert('语音识别失败: ' + e.error + '。请重试。');
-    };
-
-    recognition.onend = function() {
-        if (isRecording) {
-            // recognition ended naturally (continuous=false), process result
-            if (finalText) {
-                processVoiceText(finalText);
-                stopRecording();
-            } else {
-                stopRecording();
-            }
-        }
-    };
-
-    try { recognition.start(); } catch(ex) { console.warn('start error', ex); }
-
-    isRecording = true;
-    voiceSeconds = 0;
-    btn.classList.add('recording');
-    icon.textContent = '⏹';
-    label.textContent = '正在听...';
-    timer.style.display = '';
-    timer.textContent = '00:00';
-
-    voiceTimerInterval = setInterval(function() {
-        voiceSeconds++;
-        var m = Math.floor(voiceSeconds/60);
-        var s = voiceSeconds%60;
-        timer.textContent = (m<10?'0':'')+m+':'+(s<10?'0':'')+s;
-        if (voiceSeconds >= 60) stopRecording();
-    }, 1000);
-}
-
-function stopRecording() {
-    isRecording = false;
-    if (recognition) { try { recognition.stop(); } catch(ex) {} recognition = null; }
-    if (voiceTimerInterval) { clearInterval(voiceTimerInterval); voiceTimerInterval = null; }
-
-    var btn = document.getElementById('voiceBtn');
-    var icon = document.getElementById('voiceIcon');
-    var timer = document.getElementById('voiceTimer');
-    btn.classList.remove('recording');
-    icon.textContent = '🎤';
-    timer.style.display = 'none';
-}
-
-async function processVoiceText(text) {
-    if (!text || !text.trim()) { resetVoiceBtn(); return; }
-    text = text.trim();
-
-    var btn = document.getElementById('voiceBtn');
-    var label = document.getElementById('voiceLabel');
-    btn.classList.add('processing');
-    label.textContent = 'AI 解析中...';
-
-    // 显示加载弹窗
-    sm('<div class="voice-result"><div class="vr-header"><h2>语音识别结果</h2></div><div class="vr-body"><div class="voice-spinner"><div class="spinner"></div><div class="spinner-text">AI 正在解析订单...</div><div style="font-size:12px;color:var(--text-dim);margin-top:4px;text-align:center;max-height:80px;overflow-y:auto">'+escapeHtml(text)+'</div></div></div></div>');
+    // 显示加载状态
+    sm('<div class="voice-result"><div class="vr-header"><h2>AI 解析中...</h2></div><div class="vr-body"><div class="voice-spinner"><div class="spinner"></div><div class="spinner-text">正在分析订单内容...</div><div style="font-size:12px;color:var(--text-dim);margin-top:4px;text-align:center;max-height:80px;overflow-y:auto">'+escapeHtml(text)+'</div></div></div></div>');
 
     try {
         var order = await callDeepSeek(text);
@@ -556,16 +477,8 @@ async function processVoiceText(text) {
     } catch(e) {
         console.error('DeepSeek error:', e);
         cm();
-        alert('AI 解析失败: ' + (e.message||'网络错误') + '\n\n识别文字: ' + text + '\n\n请重试或手动录入。');
+        alert('AI 解析失败: ' + (e.message||'网络错误') + '\n\n输入内容: ' + text + '\n\n请重试或手动录入。');
     }
-    resetVoiceBtn();
-}
-
-function resetVoiceBtn() {
-    var btn = document.getElementById('voiceBtn');
-    var label = document.getElementById('voiceLabel');
-    btn.classList.remove('recording','processing');
-    label.textContent = '语音录入';
 }
 
 async function callDeepSeek(text) {
@@ -691,8 +604,8 @@ function showVoiceOrder(order, rawText) {
     h += '<input class="vr-value editable" id="voSpecial" value="'+escapeHtml(order.special_requirements||'')+'" placeholder="如：打包、快点上、少放盐..." style="width:100%">';
     h += '</div>';
 
-    // 原始语音
-    h += '<div class="vr-section"><div class="vr-label" style="cursor:pointer;display:flex;align-items:center;gap:4px" onclick="var x=document.getElementById(\'voRaw\');x.style.display=x.style.display==\'none\'?\'\':\'none\'">🎙 原始语音 <span style="font-size:10px">▸</span></div>';
+    // 原始输入
+    h += '<div class="vr-section"><div class="vr-label" style="cursor:pointer;display:flex;align-items:center;gap:4px" onclick="var x=document.getElementById(\'voRaw\');x.style.display=x.style.display==\'none\'?\'\':\'none\'">📝 原始输入 <span style="font-size:10px">▸</span></div>';
     h += '<div id="voRaw" style="display:none;font-size:12px;color:var(--text-dim);background:var(--bg);border-radius:8px;padding:8px 12px;margin-top:4px">'+escapeHtml(rawText)+'</div>';
     h += '</div>';
 
