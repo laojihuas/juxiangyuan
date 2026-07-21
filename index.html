@@ -351,10 +351,13 @@ function ro() {
     e.innerHTML = a.map(function(o) {
         var card = '<div class="order-card">';
         card += '<div class="order-card-header">';
-        card += '<div style="display:flex;align-items:center;gap:8px"><span class="table-tag">'+o.table+'</span><span class="time">'+o.time+'</span></div>';
+        card += '<div style="display:flex;align-items:center;gap:5px;min-width:0;flex-shrink:1;overflow:hidden">';
+        card += '<span class="table-tag" style="cursor:pointer;flex-shrink:0" onclick="event.stopPropagation();changeTable('+o.id+',\''+o.table.replace(/'/g,"\\'")+'\')" title="点击更换桌号">'+o.table+'</span>';
+        if (o.special_requirements) card += '<span class="note-tag" style="font-size:10px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1">'+o.special_requirements+'</span>';
+        card += '</div>';
+        card += '<span class="time" style="flex:1;text-align:center;font-size:12px;color:var(--text-dim)">'+o.time+'</span>';
         card += '<div class="btn-actions"><button onclick="cancOrder('+o.id+')">✕</button></div>';
         card += '</div>';
-        if (o.special_requirements) card += '<div style="font-size:11px;color:var(--orange-light);padding:2px 0 4px 2px">📝 '+o.special_requirements+'</div>';
         (o.items||[]).forEach(function(it,i){
             var d = gd(it.dishId);
             var st = d.price * it.qty;
@@ -395,6 +398,18 @@ async function doCancOrder(oid) {
     cm(); ro();
 }
 
+// ========== 更换桌号 ==========
+function changeTable(oid, curTable) {
+    var opts = TABLES.map(function(t){ return '<option value="'+t+'"'+(t===curTable?' selected':'')+'>'+t+'</option>'; }).join('');
+    sm('<div class="modal"><div class="modal-header"><h2>更换桌号</h2><button class="close-btn" onclick="cm()">✕</button></div><div class="modal-body"><select id="newTableSelect" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:16px;outline:none">'+opts+'</select></div><div class="modal-footer"><button class="btn" onclick="cm()">取消</button><button class="btn primary" onclick="doChangeTable('+oid+')">确认更换</button></div></div>');
+}
+async function doChangeTable(oid) {
+    var newTbl = document.getElementById('newTableSelect').value;
+    var o = orders.find(function(x){ return x.id===oid; });
+    if (o) { o.table = newTbl; await supabase.from('orders').upsert(o,{onConflict:'id'}); }
+    cm(); ro();
+}
+
 // ========== 结账 ==========
 function checkout(oid) {
     var o = orders.find(function(x){ return x.id===oid; });
@@ -414,37 +429,192 @@ async function markUnpaid(oid) {
     cm(); ro(); if (tab==="admin") ra();
 }
 
-// ========== 加菜 ==========
-var addAds = {}, addAdt = null;
-function addDish(oid) { addAdt=oid; addAds={}; bnm(true); }
-function bnm(isA) {
-    var html = '<div class="modal"><div class="modal-header"><h2>加菜</h2><button class="close-btn" onclick="cm()">✕</button></div><div class="modal-body">';
-    CATEGORY_ORDER.forEach(function(cat) {
-        var items = dishes.filter(function(d){ return (CAT_MAP[d.cat]||d.cat)===cat; });
-        if (!items.length) return;
-        html += '<div class="cat-group-title">'+cat+'</div><div class="dish-grid">';
-        items.forEach(function(d) {
-            html += '<div class="dish-item" onclick="ads('+d.id+')"><div class="dish-name">'+d.name+'</div><div class="dish-price">¥'+d.price+'</div><div class="dish-badge" id="ab_'+d.id+'"></div></div>';
-        });
-        html += '</div>';
-    });
-    html += '</div><div class="modal-footer" style="justify-content:space-between"><span>已选 <strong id="addCount">0</strong> 份</span><button class="btn primary" onclick="cda()">确认追加</button></div></div>';
-    sm(html);
+// ========== 加菜（文字输入 + DeepSeek） ==========
+var addDishOrderId = null;
+
+function addDish(oid) {
+    addDishOrderId = oid;
+    var h = '<div class="new-order-modal"><div class="nom-header"><h2>➕ 加菜</h2><button class="close-btn" onclick="cm()">✕</button></div>';
+    h += '<div class="nom-body">';
+    h += '<textarea id="addDishTextInput" placeholder="在此输入要加的菜品，例如：&#10;&#10;烤牛肉串10串 烤生蚝5个 可乐2瓶&#10;微辣&#10;&#10;AI 将自动识别菜品并追加到订单" autofocus></textarea>';
+    h += '<div class="nom-hint">💡 输入要追加的菜品名称和数量，多个菜品用空格或逗号分隔</div>';
+    h += '</div>';
+    h += '<div class="nom-footer">';
+    h += '<button class="btn cancel" onclick="cm()">取消</button>';
+    h += '<button class="btn submit" onclick="submitAddDish()">🤖 AI 解析加菜</button>';
+    h += '</div></div>';
+    sm(h);
+    setTimeout(function() {
+        var ta = document.getElementById('addDishTextInput');
+        if (ta) ta.focus();
+    }, 100);
 }
-function ads(id) { addAds[id]=(addAds[id]||0)+1; var b=document.getElementById('ab_'+id); if(b){ b.style.display='flex'; b.textContent=addAds[id]; } var cnt=document.getElementById('addCount'); if(cnt) cnt.textContent=Object.values(addAds).reduce(function(a,b){return a+b;},0); }
-async function cda() {
-    var its = Object.entries(addAds).filter(function(a){ return a[1]>0; }).map(function(a){ return {dishId:+a[0],qty:a[1],note:"",done:false}; });
-    if (!its.length){ cm(); return; }
-    var o = orders.find(function(x){ return x.id===addAdt; });
-    if (o) {
-        if (!o.items) o.items=[];
-        its.forEach(function(it){
-            var ex = o.items.find(function(x){ return x.dishId===it.dishId&&!x.note&&!x.done; });
-            if (ex) ex.qty+=it.qty; else o.items.push(it);
-        });
-        await supabase.from('orders').upsert(o,{onConflict:'id'});
+
+async function submitAddDish() {
+    var input = document.getElementById('addDishTextInput');
+    if (!input) return;
+    var text = input.value.trim();
+    if (!text) { alert('请输入要加的菜品'); return; }
+
+    sm('<div class="voice-result"><div class="vr-header"><h2>AI 解析中...</h2></div><div class="vr-body"><div class="voice-spinner"><div class="spinner"></div><div class="spinner-text">正在分析菜品...</div><div style="font-size:12px;color:var(--text-dim);margin-top:4px;text-align:center;max-height:80px;overflow-y:auto">'+escapeHtml(text)+'</div></div></div></div>');
+
+    try {
+        var result = await callDeepSeekForAdd(text);
+        showAddDishConfirm(result, text);
+    } catch(e) {
+        console.error('DeepSeek error:', e);
+        cm();
+        alert('AI 解析失败: ' + (e.message||'网络错误') + '\n\n输入内容: ' + text + '\n\n请重试。');
     }
-    cm(); addAds={}; ro();
+}
+
+async function callDeepSeekForAdd(text) {
+    var dishList = dishes.map(function(d) {
+        return d.id + ': ' + d.name + ' (¥' + d.price + ') [' + d.cat + ']';
+    }).join('\n');
+
+    var prompt = '你是一个餐厅点餐助手。请将以下加菜内容解析为结构化JSON。\n\n' +
+        '可用菜品(ID:名称(价格)[分类]):\n' + dishList + '\n\n' +
+        '规则:\n' +
+        '1. items: 匹配菜品ID(name仅用于验证)，qty为整数，note为该项的特殊口味或整体要求(如辣度、打包等)，没有则为空字符串\n' +
+        '2. 如果菜品名模糊，尽量匹配最相近的\n' +
+        '3. 不要包含table字段\n\n' +
+        '请只返回纯JSON，不要任何解释或markdown标记:\n' +
+        '{"items":[{"dishId":ID,"name":"名称","qty":数量,"note":"备注"}]}\n\n' +
+        '加菜内容: ' + text;
+
+    var messages = [{ role: 'user', content: prompt }];
+    var data;
+
+    try {
+        var resp = await fetch('/api/deepseek', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: messages, temperature: 0.1, max_tokens: 1024 })
+        });
+        if (resp.ok) { data = await resp.json(); }
+        else { throw new Error('proxy fail'); }
+    } catch(proxyErr) {
+        console.warn('代理不可用，尝试直连:', proxyErr.message);
+        var resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + DEEPSEEK_KEY
+            },
+            body: JSON.stringify({ model: 'deepseek-chat', messages: messages, temperature: 0.1, max_tokens: 1024 })
+        });
+        if (!resp.ok) {
+            var errText = await resp.text();
+            throw new Error('DeepSeek API error ' + resp.status + ': ' + errText);
+        }
+        data = await resp.json();
+    }
+
+    var content = data.choices[0].message.content.trim();
+    content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+
+    var result;
+    try { result = JSON.parse(content); } catch(e) {
+        var m = content.match(/\{[\s\S]*\}/);
+        if (m) { try { result = JSON.parse(m[0]); } catch(e2) {} }
+        if (!result) throw new Error('无法解析 DeepSeek 返回的 JSON: ' + content);
+    }
+
+    if (!result.items || !Array.isArray(result.items)) result.items = [];
+
+    result.items = result.items.map(function(it) {
+        var d = dishes.find(function(x) { return x.id === it.dishId; });
+        if (!d) {
+            d = dishes.find(function(x) { return x.name === it.name || x.name.includes(it.name) || (it.name&&it.name.includes(x.name)); });
+            if (d) it.dishId = d.id;
+        }
+        if (!d) d = { name: it.name||'未知菜品', price:0, emoji:'❓' };
+        return {
+            dishId: it.dishId || 0,
+            qty: Math.max(1, parseInt(it.qty) || 1),
+            note: it.note || '',
+            done: false,
+            _name: d.name,
+            _price: d.price,
+            _emoji: d.emoji||'🍽'
+        };
+    }).filter(function(it) { return it.dishId > 0; });
+
+    return result;
+}
+
+function showAddDishConfirm(result, rawText) {
+    var h = '<div class="voice-result"><div class="vr-header"><h2>📋 确认加菜</h2><button class="close-btn" onclick="cm()">✕</button></div>';
+    h += '<div class="vr-body">';
+    h += '<div class="vr-section"><div class="vr-label">🍽 菜品</div>';
+    if (!result.items.length) {
+        h += '<div style="font-size:13px;color:var(--text-dim);padding:8px">未识别到菜品</div>';
+    } else {
+        result.items.forEach(function(it, i) {
+            h += '<div class="vr-item">';
+            h += '<span style="font-size:18px">'+(it._emoji||'🍽')+'</span>';
+            h += '<span class="vr-dish-name">'+it._name;
+            if (it.note) h += ' <span class="note-tag">'+it.note+'</span>';
+            h += '</span>';
+            h += '<div class="qty-ctrl"><button onclick="avQty('+i+',-1)">-</button><span class="qty-num" id="avQty_'+i+'">'+it.qty+'</span><button onclick="avQty('+i+',1)">+</button></div>';
+            h += '<button style="background:none;border:none;color:var(--text-dim);font-size:14px;cursor:pointer" onclick="avDel('+i+')">✕</button>';
+            h += '</div>';
+        });
+    }
+    h += '</div>';
+    h += '<div class="vr-section"><div class="vr-label" style="cursor:pointer;display:flex;align-items:center;gap:4px" onclick="var x=document.getElementById(\'avRaw\');x.style.display=x.style.display==\'none\'?\'\':\'none\'">📝 原始输入 <span style="font-size:10px">▸</span></div>';
+    h += '<div id="avRaw" style="display:none;font-size:12px;color:var(--text-dim);background:var(--bg);border-radius:8px;padding:8px 12px;margin-top:4px">'+escapeHtml(rawText)+'</div>';
+    h += '</div>';
+    h += '</div>';
+    h += '<div class="vr-footer">';
+    h += '<button class="btn cancel" onclick="cm()">取消</button>';
+    h += '<button class="btn confirm" onclick="confirmAddDish()">✅ 确认加菜</button>';
+    h += '</div></div>';
+
+    window._addDishResult = result;
+    window._addDishRawText = rawText;
+    sm(h);
+}
+
+function avQty(idx, delta) {
+    var r = window._addDishResult;
+    if (!r || !r.items[idx]) return;
+    r.items[idx].qty = Math.max(0, r.items[idx].qty + delta);
+    if (r.items[idx].qty <= 0) { r.items.splice(idx, 1); showAddDishConfirm(r, window._addDishRawText||''); return; }
+    var el = document.getElementById('avQty_'+idx);
+    if (el) el.textContent = r.items[idx].qty;
+}
+
+function avDel(idx) {
+    var r = window._addDishResult;
+    if (!r || !r.items[idx]) return;
+    r.items.splice(idx, 1);
+    showAddDishConfirm(r, window._addDishRawText||'');
+}
+
+async function confirmAddDish() {
+    var result = window._addDishResult;
+    if (!result) return;
+    var items = result.items.map(function(it) {
+        return { dishId: it.dishId, qty: it.qty, note: it.note||'', done: false };
+    }).filter(function(it) { return it.qty > 0 && it.dishId > 0; });
+
+    if (!items.length) { alert('请至少选择一个菜品'); return; }
+
+    var o = orders.find(function(x){ return x.id===addDishOrderId; });
+    if (o) {
+        if (!o.items) o.items = [];
+        items.forEach(function(it) {
+            var ex = o.items.find(function(x){ return x.dishId===it.dishId&&!x.note&&!x.done; });
+            if (ex) ex.qty += it.qty; else o.items.push(it);
+        });
+        await supabase.from('orders').upsert(o, {onConflict:'id'});
+    }
+    cm();
+    window._addDishResult = null;
+    window._addDishRawText = null;
+    ro();
 }
 
 // ========== 新建订单 ==========
