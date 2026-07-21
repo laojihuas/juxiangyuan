@@ -336,6 +336,7 @@ var currentCat = '';
 var categories = ["烧烤", "小炒", "美食", "锅粥", "酒水", "其他"];
 var noteOptions = ["不辣", "微辣", "中辣", "变态辣", "少油", "多葱"];
 var realtimeSub = null;
+var pollTimer = null;
 
 // ========== 加载数据 ==========
 async function loadPage(table) {
@@ -423,6 +424,36 @@ function refreshRealtime() {
             refreshOrders();
         })
         .subscribe();
+    startPolling();
+}
+
+// 轮询备选同步
+function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(async function() {
+        if (document.hidden || !currentTable) return;
+        try {
+            var { data: oData } = await supabase.from('orders').select('*').eq('table', currentTable).neq('status', 'completed');
+            if (oData) {
+                var remoteOrders = oData.map(function(o) {
+                    var items = o.items;
+                    if (typeof items === 'string') { try { items = JSON.parse(items); } catch(e) { items = []; } }
+                    if (!Array.isArray(items)) items = [];
+                    return Object.assign({}, o, { items: items });
+                });
+                var localFp = orders.map(function(o){ return o.id+'|'+o.status+'|'+o.items.length; }).sort().join(',');
+                var remoteFp = remoteOrders.map(function(o){ return o.id+'|'+o.status+'|'+o.items.length; }).sort().join(',');
+                if (localFp !== remoteFp) {
+                    orders = remoteOrders;
+                    renderMenu();
+                }
+            }
+        } catch(e) {}
+    }, 4000);
+}
+
+function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
 async function refreshOrders() {
@@ -665,43 +696,51 @@ async function submitOrder() {
         return { dishId: +k, qty: cart[k].qty, note: cart[k].note, done: false };
     });
 
-    if (activeOrder) {
-        // 追加到现有订单
-        newItems.forEach(function(ni) {
-            var ex = activeOrder.items.find(function(x) { return x.dishId === ni.dishId && !x.note && !x.done; });
-            if (ex) { ex.qty += ni.qty; }
-            else { activeOrder.items.push(ni); }
-        });
-        await supabase.from('orders').upsert(activeOrder, { onConflict: 'id' });
-    } else {
-        // 新建订单
-        var now = new Date();
-        var time = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
-        var order = {
-            id: Date.now(),
-            table: currentTable,
-            time: time,
-            created_at: Date.now(),
-            items: newItems,
-            status: 'active',
-            paid_amount: 0,
-            completed_at: null,
-            unpaid_remark: ''
-        };
-        await supabase.from('orders').insert(order);
-        orders.unshift(order);
+    try {
+        if (activeOrder) {
+            // 追加到现有订单
+            newItems.forEach(function(ni) {
+                var ex = activeOrder.items.find(function(x) { return x.dishId === ni.dishId && !x.note && !x.done; });
+                if (ex) { ex.qty += ni.qty; }
+                else { activeOrder.items.push(ni); }
+            });
+            var { error: upsertErr } = await supabase.from('orders').upsert(activeOrder, { onConflict: 'id' }).select();
+            if (upsertErr) throw new Error(upsertErr.message || '追加订单失败');
+        } else {
+            // 新建订单
+            var now = new Date();
+            var time = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+            var order = {
+                id: Date.now(),
+                table: currentTable,
+                time: time,
+                created_at: Date.now(),
+                items: newItems,
+                status: 'active',
+                paid_amount: 0,
+                completed_at: null,
+                unpaid_remark: ''
+            };
+            var { data: insertedData, error: insertErr } = await supabase.from('orders').insert(order).select();
+            if (insertErr) throw new Error(insertErr.message || '创建订单失败');
+            if (!insertedData || !insertedData.length) throw new Error('订单写入验证失败，请检查网络连接');
+            orders.unshift(order);
+        }
+
+        // 清空购物车
+        cart = {};
+        updateCartBar();
+        closeModal();
+
+        // 显示成功
+        document.getElementById('successMsg').innerHTML = activeOrder
+            ? '已追加到您的订单<br>后厨会同步收到更新～'
+            : '您的菜品已发送到后厨<br>请耐心等待～';
+        document.getElementById('successModal').classList.add('show');
+    } catch(e) {
+        console.error('提交订单失败', e);
+        alert('提交失败: ' + (e.message || '网络错误，请重试'));
     }
-
-    // 清空购物车
-    cart = {};
-    updateCartBar();
-    closeModal();
-
-    // 显示成功
-    document.getElementById('successMsg').innerHTML = activeOrder
-        ? '已追加到您的订单<br>后厨会同步收到更新～'
-        : '您的菜品已发送到后厨<br>请耐心等待～';
-    document.getElementById('successModal').classList.add('show');
 }
 
 function closeSuccess() {

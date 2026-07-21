@@ -252,6 +252,7 @@ function unlock() {
         document.getElementById('lockScreen').style.display = 'none';
         document.getElementById('mainApp').style.display = '';
         loadAllData();
+        startPolling();
     } else {
         document.getElementById('pwdInput').value = '';
         document.getElementById('pwdInput').focus();
@@ -267,6 +268,7 @@ var orders = [];
 var tab = 'orders';
 var realtimeSub = null;
 var isRefreshing = false;
+var pollTimer = null;
 
 // ========== 工具函数 ==========
 function gd(id) { var d = dishes.find(function(x) { return x.id === id; }); return d || { name:"已删除菜品", price:0, emoji:"❓" }; }
@@ -278,9 +280,10 @@ function cm() { document.getElementById('modalOverlay').classList.remove('show')
 function sm(h) { document.getElementById('modalOverlay').innerHTML=h; document.getElementById('modalOverlay').classList.add('show'); }
 document.getElementById('modalOverlay').onclick=function(e){ if(e.target===this)cm(); };
 
-// Supabase 操作包装：自动检查 error 并抛出
+// Supabase 操作包装：只对真正的 error 抛错，data 为 null 仅警告（写入可能已成功，只是 RLS 限制回读）
 async function dbOp(result) {
     if (result.error) { console.error('Supabase error:', result.error); throw new Error(result.error.message || '数据库操作失败'); }
+    if (result.data === null || result.data === undefined) { console.warn('Supabase 返回空数据（写入可能已成功，回读被限制）'); }
     return result.data;
 }
 
@@ -331,6 +334,38 @@ function setupRealtime() {
         .on('postgres_changes',{event:'*',schema:'public',table:'orders'},function(){ refreshAll(); })
         .on('postgres_changes',{event:'*',schema:'public',table:'dishes'},function(){ refreshAll(); })
         .subscribe();
+    startPolling();
+}
+
+// 轮询备选同步：实时订阅可能因 Supabase Realtime 配置问题失效，轮询作为可靠备选
+function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(async function() {
+        if (document.hidden || !unlocked) return;
+        try {
+            var r2 = await supabase.from('orders').select('*');
+            if (r2.data) {
+                var remoteOrders = r2.data.map(function(o) {
+                    var items = o.items;
+                    if (typeof items==='string'){ try{ items=JSON.parse(items); }catch(e){ items=[]; } }
+                    if (!Array.isArray(items)) items=[];
+                    return Object.assign({},o,{items:items});
+                });
+                // 检查是否有变化（比较 id+status 指纹）
+                var localFp = orders.map(function(o){ return o.id+'|'+o.status+'|'+o.items.length; }).sort().join(',');
+                var remoteFp = remoteOrders.map(function(o){ return o.id+'|'+o.status+'|'+o.items.length; }).sort().join(',');
+                if (localFp !== remoteFp) {
+                    orders = remoteOrders;
+                    var ct = tab;
+                    if (ct==='orders') ro(); else if (ct==='completed') rc(); else if (ct==='menu') rm(); else if (ct==='admin') ra();
+                }
+            }
+        } catch(e) {}
+    }, 4000);
+}
+
+function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
 document.addEventListener('visibilitychange',function(){ if(!document.hidden&&unlocked) refreshAll(); });
@@ -382,14 +417,14 @@ function ro() {
 
 async function togDone(oid, idx) {
     var o = orders.find(function(x){ return x.id===oid; });
-    if (o&&o.items[idx]) { o.items[idx].done=!o.items[idx].done; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'})); ro(); }
+    if (o&&o.items[idx]) { o.items[idx].done=!o.items[idx].done; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}).select()); ro(); }
 }
 async function chgQty(oid, idx, d) {
     var o = orders.find(function(x){ return x.id===oid; });
     if (!o||!o.items[idx]) return;
     o.items[idx].qty=Math.max(0,o.items[idx].qty+d);
     if (!o.items[idx].qty) o.items.splice(idx,1);
-    await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}));
+    await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}).select());
     ro();
 }
 function cancOrder(oid) {
@@ -411,12 +446,12 @@ function checkout(oid) {
 async function doCheckout(oid, t) {
     var paid = parseFloat(document.getElementById('ca').value) || t;
     var o = orders.find(function(x){ return x.id===oid; });
-    if (o) { o.status="completed"; o.paid_amount=paid; o.completed_at=Date.now(); o.unpaid_remark=""; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'})); }
+    if (o) { o.status="completed"; o.paid_amount=paid; o.completed_at=Date.now(); o.unpaid_remark=""; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}).select()); }
     cm(); ro(); if (tab==="admin") ra();
 }
 async function markUnpaid(oid) {
     var o = orders.find(function(x){ return x.id===oid; });
-    if (o) { o.status="completed"; o.paid_amount=0; o.completed_at=Date.now(); o.unpaid_remark=""; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'})); }
+    if (o) { o.status="completed"; o.paid_amount=0; o.completed_at=Date.now(); o.unpaid_remark=""; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}).select()); }
     cm(); ro(); if (tab==="admin") ra();
 }
 
@@ -448,7 +483,7 @@ async function cda() {
             var ex = o.items.find(function(x){ return x.dishId===it.dishId&&!x.note&&!x.done; });
             if (ex) ex.qty+=it.qty; else o.items.push(it);
         });
-        await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}));
+        await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}).select());
     }
     cm(); addAds={}; ro();
 }
@@ -673,12 +708,15 @@ async function confirmVoiceOrder() {
     };
 
     try {
-        await dbOp(supabase.from('orders').insert(newOrder));
+        var { data: inserted, error: insertErr } = await supabase.from('orders').insert(newOrder).select();
+        if (insertErr) throw new Error(insertErr.message || '数据库写入失败');
+        if (!inserted || !inserted.length) {
+            console.warn('写入返回空数据，但可能已成功，手动加入本地列表');
+        }
         orders.unshift(newOrder);
         cm();
         window._voiceOrder = null;
         ro();
-        // 震动反馈
         if (navigator.vibrate) navigator.vibrate([30,50,30]);
     } catch(e) {
         console.error('保存失败', e);
@@ -747,10 +785,10 @@ async function sd() {
     if (!n) { alert('请输入名称'); return; }
     if (editDishId) {
         var d = gd(editDishId);
-        if (d.name!=="已删除菜品") { d.name=n; d.price=p; d.cat=c; d.emoji=e; await dbOp(supabase.from('dishes').upsert(d,{onConflict:'id'})); }
+        if (d.name!=="已删除菜品") { d.name=n; d.price=p; d.cat=c; d.emoji=e; await dbOp(supabase.from('dishes').upsert(d,{onConflict:'id'}).select()); }
     } else {
         var maxId = dishes.reduce(function(m,d){ return Math.max(m,d.id); },0);
-        await dbOp(supabase.from('dishes').insert({ id:maxId+1, name:n, cat:c, price:p, emoji:e }));
+        await dbOp(supabase.from('dishes').insert({ id:maxId+1, name:n, cat:c, price:p, emoji:e }).select());
     }
     var r1 = await supabase.from('dishes').select('*'); if (r1.data) dishes = r1.data;
     cm(); rm();
@@ -810,7 +848,7 @@ async function saveUnpaidRemark(oid) {
     var o = orders.find(function(x){ return x.id===oid; });
     if (!o) return;
     o.unpaid_remark = document.getElementById('urInput').value.trim();
-    await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}));
+    await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}).select());
     cm(); if (tab==='admin') ra();
 }
 function delUnpaidOrder(oid) {
