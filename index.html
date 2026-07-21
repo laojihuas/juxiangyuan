@@ -191,6 +191,13 @@
     </style>
 </head>
 <body>
+<!-- 二维码点餐入口：URL 带 ?table= 参数时自动跳转点餐页 -->
+<script>
+(function(){
+    var p = new URLSearchParams(location.search);
+    if (p.get('table')) { location.replace('order.html' + location.search); }
+})();
+</script>
 <div class="app" id="app">
     <!-- 密码门 -->
     <div id="lockScreen" class="lock-screen">
