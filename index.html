@@ -504,12 +504,11 @@ async function callDeepSeek(text) {
         '可用菜品(ID:名称(价格)[分类]):\n' + dishList + '\n\n' +
         '规则:\n' +
         '1. table: 从语音中提取桌号，如果没提到桌号，默认设为"外卖"\n' +
-        '2. items: 匹配菜品ID(name仅用于验证)，qty为整数，note为该项的特殊口味(如辣度等)，没有则为空字符串\n' +
-        '3. special_requirements: 整个订单的特殊要求(如"打包"、"快点上"等)，没有则为空字符串\n' +
-        '4. 如果菜品名模糊，尽量匹配最相近的\n\n' +
+        '2. items: 匹配菜品ID(name仅用于验证)，qty为整数，note为该项的特殊口味或整体要求(如辣度、打包等)，没有则为空字符串\n' +
+        '3. 如果菜品名模糊，尽量匹配最相近的\n\n' +
         '请只返回纯JSON，不要任何解释或markdown标记:\n' +
-        '{"table":"桌号","items":[{"dishId":ID,"name":"名称","qty":数量,"note":"备注"}],"special_requirements":"特殊要求"}\n\n' +
-        '语音内容: ' + text;
+        '{"table":"桌号","items":[{"dishId":ID,"name":"名称","qty":数量,"note":"备注"}]}\n\n' +
+        '点餐内容: ' + text;
 
     var messages = [{ role: 'user', content: prompt }];
     var data;
@@ -577,7 +576,6 @@ async function callDeepSeek(text) {
             _emoji: d.emoji||'🍽'
         };
     }).filter(function(it) { return it.dishId > 0; });
-    if (!order.special_requirements) order.special_requirements = '';
 
     return order;
 }
@@ -610,11 +608,6 @@ function showVoiceOrder(order, rawText) {
             h += '</div>';
         });
     }
-    h += '</div>';
-
-    // 特殊要求
-    h += '<div class="vr-section"><div class="vr-label">📝 特殊要求</div>';
-    h += '<input class="vr-value editable" id="voSpecial" value="'+escapeHtml(order.special_requirements||'')+'" placeholder="如：打包、快点上、少放盐..." style="width:100%">';
     h += '</div>';
 
     // 原始输入
@@ -657,8 +650,6 @@ async function confirmVoiceOrder() {
     // 读取用户可能修改的值
     var tbl = document.getElementById('voTable');
     if (tbl) order.table = tbl.value;
-    var spec = document.getElementById('voSpecial');
-    if (spec) order.special_requirements = spec.value.trim();
 
     // 移除临时字段
     var items = order.items.map(function(it) {
@@ -678,8 +669,7 @@ async function confirmVoiceOrder() {
         status: 'active',
         paid_amount: 0,
         completed_at: null,
-        unpaid_remark: '',
-        special_requirements: order.special_requirements||''
+        unpaid_remark: ''
     };
 
     try {
