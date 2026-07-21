@@ -278,6 +278,12 @@ function cm() { document.getElementById('modalOverlay').classList.remove('show')
 function sm(h) { document.getElementById('modalOverlay').innerHTML=h; document.getElementById('modalOverlay').classList.add('show'); }
 document.getElementById('modalOverlay').onclick=function(e){ if(e.target===this)cm(); };
 
+// Supabase 操作包装：自动检查 error 并抛出
+async function dbOp(result) {
+    if (result.error) { console.error('Supabase error:', result.error); throw new Error(result.error.message || '数据库操作失败'); }
+    return result.data;
+}
+
 // ========== 数据加载 ==========
 async function loadAllData() {
     try {
@@ -376,21 +382,21 @@ function ro() {
 
 async function togDone(oid, idx) {
     var o = orders.find(function(x){ return x.id===oid; });
-    if (o&&o.items[idx]) { o.items[idx].done=!o.items[idx].done; await supabase.from('orders').upsert(o,{onConflict:'id'}); ro(); }
+    if (o&&o.items[idx]) { o.items[idx].done=!o.items[idx].done; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'})); ro(); }
 }
 async function chgQty(oid, idx, d) {
     var o = orders.find(function(x){ return x.id===oid; });
     if (!o||!o.items[idx]) return;
     o.items[idx].qty=Math.max(0,o.items[idx].qty+d);
     if (!o.items[idx].qty) o.items.splice(idx,1);
-    await supabase.from('orders').upsert(o,{onConflict:'id'});
+    await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}));
     ro();
 }
 function cancOrder(oid) {
     sm('<div class="modal"><div class="modal-header"><h2>取消订单</h2><button class="close-btn" onclick="cm()">✕</button></div><div class="confirm-body"><div class="confirm-text">确认取消该订单？</div><div class="confirm-actions"><button class="btn" onclick="cm()">返回</button><button class="btn primary" onclick="doCancOrder('+oid+')">确认取消</button></div></div></div>');
 }
 async function doCancOrder(oid) {
-    await supabase.from('orders').delete().eq('id',oid);
+    await dbOp(supabase.from('orders').delete().eq('id',oid));
     orders = orders.filter(function(x){ return x.id!==oid; });
     cm(); ro();
 }
@@ -405,12 +411,12 @@ function checkout(oid) {
 async function doCheckout(oid, t) {
     var paid = parseFloat(document.getElementById('ca').value) || t;
     var o = orders.find(function(x){ return x.id===oid; });
-    if (o) { o.status="completed"; o.paid_amount=paid; o.completed_at=Date.now(); o.unpaid_remark=""; await supabase.from('orders').upsert(o,{onConflict:'id'}); }
+    if (o) { o.status="completed"; o.paid_amount=paid; o.completed_at=Date.now(); o.unpaid_remark=""; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'})); }
     cm(); ro(); if (tab==="admin") ra();
 }
 async function markUnpaid(oid) {
     var o = orders.find(function(x){ return x.id===oid; });
-    if (o) { o.status="completed"; o.paid_amount=0; o.completed_at=Date.now(); o.unpaid_remark=""; await supabase.from('orders').upsert(o,{onConflict:'id'}); }
+    if (o) { o.status="completed"; o.paid_amount=0; o.completed_at=Date.now(); o.unpaid_remark=""; await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'})); }
     cm(); ro(); if (tab==="admin") ra();
 }
 
@@ -442,7 +448,7 @@ async function cda() {
             var ex = o.items.find(function(x){ return x.dishId===it.dishId&&!x.note&&!x.done; });
             if (ex) ex.qty+=it.qty; else o.items.push(it);
         });
-        await supabase.from('orders').upsert(o,{onConflict:'id'});
+        await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}));
     }
     cm(); addAds={}; ro();
 }
@@ -677,7 +683,7 @@ async function confirmVoiceOrder() {
     };
 
     try {
-        await supabase.from('orders').insert(newOrder);
+        await dbOp(supabase.from('orders').insert(newOrder));
         orders.unshift(newOrder);
         cm();
         window._voiceOrder = null;
@@ -711,7 +717,7 @@ function rc() {
 }
 async function delCompOrder(oid) {
     if (!confirm('确认删除该已完成订单？')) return;
-    await supabase.from('orders').delete().eq('id',oid);
+    await dbOp(supabase.from('orders').delete().eq('id',oid));
     orders = orders.filter(function(x){ return x.id!==oid; });
     rc(); if (tab==='admin') ra();
 }
@@ -751,17 +757,17 @@ async function sd() {
     if (!n) { alert('请输入名称'); return; }
     if (editDishId) {
         var d = gd(editDishId);
-        if (d.name!=="已删除菜品") { d.name=n; d.price=p; d.cat=c; d.emoji=e; await supabase.from('dishes').upsert(d,{onConflict:'id'}); }
+        if (d.name!=="已删除菜品") { d.name=n; d.price=p; d.cat=c; d.emoji=e; await dbOp(supabase.from('dishes').upsert(d,{onConflict:'id'})); }
     } else {
         var maxId = dishes.reduce(function(m,d){ return Math.max(m,d.id); },0);
-        await supabase.from('dishes').insert({ id:maxId+1, name:n, cat:c, price:p, emoji:e });
+        await dbOp(supabase.from('dishes').insert({ id:maxId+1, name:n, cat:c, price:p, emoji:e }));
     }
     var r1 = await supabase.from('dishes').select('*'); if (r1.data) dishes = r1.data;
     cm(); rm();
 }
 async function dd(id) {
     if (!confirm('确认删除？')) return;
-    await supabase.from('dishes').delete().eq('id',id);
+    await dbOp(supabase.from('dishes').delete().eq('id',id));
     dishes = dishes.filter(function(d){ return d.id!==id; });
     rm();
 }
@@ -814,14 +820,14 @@ async function saveUnpaidRemark(oid) {
     var o = orders.find(function(x){ return x.id===oid; });
     if (!o) return;
     o.unpaid_remark = document.getElementById('urInput').value.trim();
-    await supabase.from('orders').upsert(o,{onConflict:'id'});
+    await dbOp(supabase.from('orders').upsert(o,{onConflict:'id'}));
     cm(); if (tab==='admin') ra();
 }
 function delUnpaidOrder(oid) {
     sm('<div class="modal"><div class="modal-header"><h2>删除未收款订单</h2><button class="close-btn" onclick="cm()">✕</button></div><div class="confirm-body"><div class="confirm-text">确认删除该未收款订单？<br><span style="font-size:12px;color:var(--text-dim)">此操作不可恢复</span></div><div class="confirm-actions"><button class="btn" onclick="cm()">取消</button><button class="btn" style="background:var(--red);color:#fff;font-weight:600" onclick="doDelUnpaid('+oid+')">确认删除</button></div></div></div>');
 }
 async function doDelUnpaid(oid) {
-    await supabase.from('orders').delete().eq('id',oid);
+    await dbOp(supabase.from('orders').delete().eq('id',oid));
     orders = orders.filter(function(x){ return x.id!==oid; });
     cm(); if (tab==='admin') ra(); if (tab==='orders') ro(); if (tab==='completed') rc();
 }
