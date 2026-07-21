@@ -268,6 +268,21 @@ var orders = [];
 var tab = 'orders';
 var realtimeSub = null;
 var isRefreshing = false;
+var knownOrderIds = {};
+var soundSuppressUntil = 0;
+
+// ========== 新订单语音播报 ==========
+function playNewOrderSound() {
+    try {
+        var utter = new SpeechSynthesisUtterance('有新订单了');
+        utter.lang = 'zh-CN';
+        utter.rate = 1.0;
+        utter.pitch = 1.1;
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utter);
+    } catch(e) { console.warn('语音播报失败', e); }
+}
+function suppressSound(ms) { soundSuppressUntil = Date.now() + (ms || 3000); }
 
 // ========== 工具函数 ==========
 function gd(id) { var d = dishes.find(function(x) { return x.id === id; }); return d || { name:"已删除菜品", price:0, emoji:"❓" }; }
@@ -307,12 +322,21 @@ async function refreshAll() {
         if (r1.data) dishes = r1.data;
         var r2 = await supabase.from('orders').select('*');
         if (r2.data) {
-            orders = r2.data.map(function(o) {
+            var newOrders = r2.data.map(function(o) {
                 var items = o.items;
                 if (typeof items==='string'){ try{ items=JSON.parse(items); }catch(e){ items=[]; } }
                 if (!Array.isArray(items)) items=[];
                 return Object.assign({},o,{items:items});
             });
+            // 检测新订单（排除自己刚创建的）
+            if (Date.now() > soundSuppressUntil) {
+                var hasNew = newOrders.some(function(o) {
+                    return o.status === 'active' && !knownOrderIds[o.id];
+                });
+                if (hasNew) playNewOrderSound();
+            }
+            orders = newOrders;
+            orders.forEach(function(o) { knownOrderIds[o.id] = true; });
         }
         var currentTab = tab;
         if (currentTab==='orders') ro(); else if (currentTab==='completed') rc(); else if (currentTab==='menu') rm(); else if (currentTab==='admin') ra();
@@ -835,6 +859,7 @@ async function confirmVoiceOrder() {
 
     if (!items.length) { alert('请至少选择一个菜品'); return; }
 
+    suppressSound(3000);  // 自己下单不播报
     var now = new Date();
     var time = ('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
     var newOrder = {
