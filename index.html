@@ -628,8 +628,8 @@ var DEEPSEEK_KEY = 'sk-05515694b8a74eac949117aaacc79e82';
 function openNewOrder() {
     var h = '<div class="new-order-modal"><div class="nom-header"><h2>🆕 新建订单</h2><button class="close-btn" onclick="cm()">✕</button></div>';
     h += '<div class="nom-body">';
-    h += '<textarea id="orderTextInput" placeholder="在此输入订单信息，例如：&#10;&#10;内3 烤牛肉串10串 烤生蚝5个 可乐2瓶&#10;微辣 打包&#10;&#10;AI 将自动识别菜品、数量和特殊要求" autofocus></textarea>';
-    h += '<div class="nom-hint">💡 输入格式：<b>桌号 菜品名称+数量 特殊要求</b><br>多个菜品用空格或逗号分隔，AI 会自动匹配菜单并整理</div>';
+    h += '<textarea id="orderTextInput" placeholder="使用语音转文字输入，例如：&#10;&#10;坐里面第3桌  要烤牛肉串10串 烤生蚝5个 可乐2瓶&#10;微辣 不要葱" autofocus></textarea>';
+    h += '<div class="nom-hint">💡 输入格式：<b>桌号  菜品名称+数量  特殊要求</b><br>像日常聊天叨唠完，剩下交给AI自动匹配菜单并整理</div>';
     h += '</div>';
     h += '<div class="nom-footer">';
     h += '<button class="btn cancel" onclick="cm()">取消</button>';
