@@ -490,30 +490,13 @@ async function callDeepSeekForAdd(text) {
     var messages = [{ role: 'user', content: prompt }];
     var data;
 
-    try {
-        var resp = await fetch('/api/deepseek', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: messages, temperature: 0.1, max_tokens: 1024 })
-        });
-        if (resp.ok) { data = await resp.json(); }
-        else { throw new Error('proxy fail'); }
-    } catch(proxyErr) {
-        console.warn('代理不可用，尝试直连:', proxyErr.message);
-        var resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + DEEPSEEK_KEY
-            },
-            body: JSON.stringify({ model: 'deepseek-chat', messages: messages, temperature: 0.1, max_tokens: 1024 })
-        });
-        if (!resp.ok) {
-            var errText = await resp.text();
-            throw new Error('DeepSeek API error ' + resp.status + ': ' + errText);
-        }
-        data = await resp.json();
-    }
+    var resp = await fetch('/api/deepseek', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messages, temperature: 0.1, max_tokens: 1024 })
+    });
+    if (!resp.ok) throw new Error('API error ' + resp.status);
+    data = await resp.json();
 
     var content = data.choices[0].message.content.trim();
     content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -623,7 +606,6 @@ async function confirmAddDish() {
 
 // ========== 新建订单 ==========
 var TABLES = ["外卖","外卖2","外卖3","内1","内2","内3","内4","内5","内6","内7","内8","内9","外1","外2","外3","外4","外5","外6","外7","外8","外9"];
-var DEEPSEEK_KEY = 'sk-bf7c3df962774c27b90d0cf9570f8f13';
 
 function openNewOrder() {
     var h = '<div class="new-order-modal"><div class="nom-header"><h2>🆕 新建订单</h2><button class="close-btn" onclick="cm()">✕</button></div>';
@@ -682,32 +664,14 @@ async function callDeepSeek(text) {
     var messages = [{ role: 'user', content: prompt }];
     var data;
 
-    // 优先通过 Netlify 代理（解决 CORS）
-    try {
-        var resp = await fetch('/api/deepseek', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messages: messages, temperature: 0.1, max_tokens: 1024 })
-        });
-        if (resp.ok) { data = await resp.json(); }
-        else { throw new Error('proxy fail'); }
-    } catch(proxyErr) {
-        // 代理不可用时尝试直连（可能有 CORS 问题）
-        console.warn('代理不可用，尝试直连:', proxyErr.message);
-        var resp = await fetch('https://api.deepseek.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + DEEPSEEK_KEY
-            },
-            body: JSON.stringify({ model: 'deepseek-chat', messages: messages, temperature: 0.1, max_tokens: 1024 })
-        });
-        if (!resp.ok) {
-            var errText = await resp.text();
-            throw new Error('DeepSeek API error ' + resp.status + ': ' + errText);
-        }
-        data = await resp.json();
-    }
+    // 通过代理调用 DeepSeek（KEY 保存在服务端）
+    var resp = await fetch('/api/deepseek', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messages, temperature: 0.1, max_tokens: 1024 })
+    });
+    if (!resp.ok) throw new Error('API error ' + resp.status);
+    data = await resp.json();
 
     var content = data.choices[0].message.content.trim();
     content = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
