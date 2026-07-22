@@ -1,7 +1,7 @@
 // Vercel Serverless Function: DeepSeek API Proxy
 // 解决浏览器 CORS 问题，API Key 保存在服务端
 
-const DEEPSEEK_KEY = 'sk-05515694b8a74eac949117aaacc79e82';
+const DEEPSEEK_KEY = 'sk-bf7c3df962774c27b90d0cf9570f8f13';
 
 export default async function handler(req, res) {
   // CORS headers
